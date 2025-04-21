@@ -20,7 +20,7 @@ function App() {
   const [headers, setHeaders] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [editingRow, setEditingRow] = useState(null);
+  const [editingRowIndex, setEditingRowIndex] = useState(null); // Changed to store index only
   const [editedData, setEditedData] = useState({});
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [fileOptions, setFileOptions] = useState([]);
@@ -40,6 +40,7 @@ function App() {
     htmlContent: ""
   });
   const [isSaving, setIsSaving] = useState(false);
+  const [mailRowData, setMailRowData] = useState(null); // Added for mail form
 
   useEffect(() => {
     const storedFiles = localStorage.getItem('excelFiles');
@@ -196,9 +197,9 @@ function App() {
       });
 
       if (result.isConfirmed) {
-        const updatedData = data.map((row, index) => 
-          index === editingRow ? { ...editedData } : { ...row }
-        );
+        // Create a new array with the updated data at the correct index
+        const updatedData = [...data];
+        updatedData[editingRowIndex] = editedData;
 
         const existingFiles = JSON.parse(localStorage.getItem('excelFiles')) || [];
         const fileIndex = existingFiles.findIndex(f => f.fileName === fileName);
@@ -216,7 +217,7 @@ function App() {
           
           Swal.fire('Updated!', 'The Member has been updated.', 'success');
           setIsModalOpen(false);
-          setEditingRow(null);
+          setEditingRowIndex(null);
           setEditedData({});
         }
       } else {
@@ -280,13 +281,13 @@ function App() {
       member: row.MEMBER || "",
       htmlContent: ""
     });
-    setEditingRow(row);
+    setMailRowData(row); // Use separate state for mail row data
     setIsMailModalOpen(true);
   }
 
   const submitMail = () => {
     const htmlContent = ReactDOMServer.renderToStaticMarkup(
-      <HtmlTemplate senderData={editedData} mailData={mailForm} row={editingRow} />
+      <HtmlTemplate senderData={editedData} mailData={mailForm} row={mailRowData} />
     );
     
     console.log("Email would be sent with:", {
@@ -510,7 +511,11 @@ function App() {
                   </button>
                   <button
                     onClick={() => { 
-                      setEditingRow(rowIndex);
+                      // Find the index of the current row in the original data array
+                      const originalIndex = data.findIndex(item => 
+                        item.MEMBER === row.MEMBER && item.NAME === row.NAME
+                      );
+                      setEditingRowIndex(originalIndex);
                       setEditedData(row);
                       setIsModalOpen(true);
                     }}
@@ -642,7 +647,7 @@ function App() {
               <button
                 onClick={() => {
                   setIsModalOpen(false);
-                  setEditingRow(null);
+                  setEditingRowIndex(null);
                   setEditedData({});
                 }}
                 className="px-4 py-2 bg-red-500 text-white rounded-sm text-xs"
