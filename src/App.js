@@ -4,7 +4,6 @@ import Swal from 'sweetalert2';
 import 'sweetalert2/dist/sweetalert2.min.css';
 import ReactDOMServer from 'react-dom/server';
 
-// Mock email template component (replace with your actual implementation)
 const HtmlTemplate = ({ senderData, mailData, row }) => (
   <div>
     <h1>Email Template</h1>
@@ -40,8 +39,8 @@ function App() {
     member: "",
     htmlContent: ""
   });
+  const [isSaving, setIsSaving] = useState(false);
 
-  // Load files from localStorage on component mount
   useEffect(() => {
     const storedFiles = localStorage.getItem('excelFiles');
     if (storedFiles) {
@@ -49,7 +48,6 @@ function App() {
     }
   }, []);
 
-  // Function to convert Excel serial number to a date in dd-mm-yyyy format
   function convertExcelDate(serial) {
     if (isNaN(serial)) return serial;
     const date = new Date((serial - 25569) * 86400 * 1000);
@@ -59,7 +57,6 @@ function App() {
     return `${day}-${month}-${year}`;
   };
 
-  // Handle file upload and parse the data
   function handleFileUpload(event) {
     const uploadedFile = event.target.files[0];
     if (!uploadedFile) return;
@@ -73,7 +70,6 @@ function App() {
         const sheet = wb.Sheets[wb.SheetNames[0]];
         const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1 });
         
-        // Process the data
         const headers = jsonData[0];
         const rows = jsonData.slice(1).map((row) => {
           let obj = {};
@@ -87,34 +83,25 @@ function App() {
           return obj;
         });
 
-        // Save to localStorage
         const fileData = {
           fileName: uploadedFile.name,
           headers: headers,
           data: rows
         };
 
-        // Get existing files from localStorage
         const existingFiles = JSON.parse(localStorage.getItem('excelFiles')) || [];
-        
-        // Check if file already exists
         const existingIndex = existingFiles.findIndex(f => f.fileName === uploadedFile.name);
         
         if (existingIndex >= 0) {
-          // Update existing file
           existingFiles[existingIndex] = fileData;
           Swal.fire('Updated!', 'File has been updated.', 'success');
         } else {
-          // Add new file
           existingFiles.push(fileData);
           Swal.fire('Success!', 'File has been uploaded.', 'success');
         }
 
-        // Save back to localStorage
         localStorage.setItem('excelFiles', JSON.stringify(existingFiles));
         setFileOptions(existingFiles);
-        
-        // Set current file data
         setFileName(uploadedFile.name);
         setHeaders(headers);
         setData(rows);
@@ -126,7 +113,6 @@ function App() {
     reader.readAsBinaryString(uploadedFile);
   }
 
-  // Handle file deletion
   const handleDeleteFile = async (fileName) => {
     try {
       const result = await Swal.fire({
@@ -140,14 +126,12 @@ function App() {
       });
 
       if (result.isConfirmed) {
-        // Remove from localStorage
         const existingFiles = JSON.parse(localStorage.getItem('excelFiles')) || [];
         const updatedFiles = existingFiles.filter(f => f.fileName !== fileName);
         
         localStorage.setItem('excelFiles', JSON.stringify(updatedFiles));
         setFileOptions(updatedFiles);
         
-        // Clear current data if deleted file was the active one
         if (fileName === fileName) {
           setData([]);
           setHeaders([]);
@@ -163,29 +147,23 @@ function App() {
     }
   };
 
-  // Export file
   const handleExportFile = (fileName) => {
     try {
       setToggleFileOptions("hidden");
       
-      // Find the file data
       const fileData = fileOptions.find(f => f.fileName === fileName);
       if (!fileData) {
         Swal.fire('Error!', 'File not found.', 'error');
         return;
       }
       
-      // Prepare data for export (include headers as first row)
       const exportData = [fileData.headers, ...fileData.data.map(row => {
         return fileData.headers.map(header => row[header] || '');
       })];
       
-      // Convert to Excel
       const ws = XLSX.utils.aoa_to_sheet(exportData);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
-      
-      // Trigger download
       XLSX.writeFile(wb, fileName);
     } catch (error) {
       console.error("Error exporting file:", error);
@@ -193,7 +171,6 @@ function App() {
     }
   };
 
-  // Select and show file data in table
   function selectFileHandler(fileName) {
     setFileName(fileName);
     setToggleFileOptions("hidden");
@@ -205,11 +182,8 @@ function App() {
     }
   }
 
-  // Handle saving edited data
   const handleSaveEdit = async () => {
-    const updatedData = [...data];
-    updatedData[editingRow] = editedData;
-
+    setIsSaving(true);
     try {
       const result = await Swal.fire({
         title: 'Are you sure?',
@@ -222,14 +196,22 @@ function App() {
       });
 
       if (result.isConfirmed) {
-        // Update localStorage
+        const updatedData = data.map((row, index) => 
+          index === editingRow ? { ...editedData } : { ...row }
+        );
+
         const existingFiles = JSON.parse(localStorage.getItem('excelFiles')) || [];
         const fileIndex = existingFiles.findIndex(f => f.fileName === fileName);
         
         if (fileIndex >= 0) {
-          existingFiles[fileIndex].data = updatedData;
-          localStorage.setItem('excelFiles', JSON.stringify(existingFiles));
-          setFileOptions(existingFiles);
+          const updatedFiles = [...existingFiles];
+          updatedFiles[fileIndex] = {
+            ...existingFiles[fileIndex],
+            data: updatedData
+          };
+          
+          localStorage.setItem('excelFiles', JSON.stringify(updatedFiles));
+          setFileOptions(updatedFiles);
           setData(updatedData);
           
           Swal.fire('Updated!', 'The Member has been updated.', 'success');
@@ -243,6 +225,8 @@ function App() {
     } catch (error) {
       console.error("Error updating data:", error);
       Swal.fire('Error!', 'There was an issue updating the data.', 'error');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -251,7 +235,6 @@ function App() {
     setEditedData((prev) => ({ ...prev, [name]: value }));
   };
 
-  // Delete member from current file
   const deleteMemberFun = async (memberNumber, memberName) => {
     try {
       const result = await Swal.fire({
@@ -265,10 +248,8 @@ function App() {
       });
 
       if (result.isConfirmed) {
-        // Filter out the member to be deleted
         const dataAfterDelete = data.filter(v => v.MEMBER !== memberNumber);
 
-        // Update localStorage
         const existingFiles = JSON.parse(localStorage.getItem('excelFiles')) || [];
         const fileIndex = existingFiles.findIndex(f => f.fileName === fileName);
         
@@ -289,7 +270,6 @@ function App() {
     }
   };
 
-  // Mail functionality (client-side only - would need server to actually send)
   const toggleMailForm = (row) => {
     setMailForm({
       to: row.EMAIL || "",
@@ -309,7 +289,6 @@ function App() {
       <HtmlTemplate senderData={editedData} mailData={mailForm} row={editingRow} />
     );
     
-    // In a real app, you would send this to a server
     console.log("Email would be sent with:", {
       ...mailForm,
       htmlContent
@@ -324,7 +303,6 @@ function App() {
     setMailForm({...mailForm, [name]: value});
   }
 
-  // Filter and paginate data
   const paginatedDataOne = useMemo(() => {
     if (data.length > 0) {
       let filtered = data.filter((row) => {
@@ -333,15 +311,11 @@ function App() {
         );
       });
 
-      // Calculate total number of pages after filtering
       const totalPages = Math.ceil(filtered.length / rowsPerPage);
-
-      // Ensure the current page doesn't exceed total pages
       if (currentPage > totalPages && totalPages > 0) {
         setCurrentPage(totalPages);
       }
 
-      // Sorting logic
       if (sortWithAddress) {
         const sortKey = sortWithAddress.split("-")[0];
         const sortOrder = sortWithAddress.split("-")[1];
@@ -365,7 +339,6 @@ function App() {
         });
       }
 
-      // Pagination
       const startIndex = (currentPage - 1) * rowsPerPage;
       const endIndex = currentPage * rowsPerPage;
       return filtered.slice(startIndex, endIndex);
@@ -376,7 +349,6 @@ function App() {
   return (
     <div className="max-w-4xl mx-auto my-5 p-5 bg-white rounded-lg shadow-lg max-w-full overflow-auto">
       <div className="flex flex-wrap items-center justify-start mb-4 gap-y-2">
-        {/* File Options Dropdown */}
         <div className='w-max flex flex-col justify-start items-start relative z-10'>
           <span 
             className='w-full block cursor-pointer text-xs gap-x-3 p-3 py-3.5 border border-gray-300 rounded-lg bg-gray-50 shadow-sm w-max max-w-xs h-full' 
@@ -417,7 +389,6 @@ function App() {
           </ul>
         </div>
 
-        {/* File Upload */}
         <fieldset className="flex items-center gap-x-3 p-3 border border-gray-300 rounded-lg bg-gray-50 shadow-sm w-max max-w-xs ml-3">
           <label htmlFor="file-input" className="cursor-pointer text-gray-700 font-semibold text-sm">
             <span style={{whiteSpace:"nowrap"}} className="bg-blue-500 text-white text-[10px] px-3 py-2 rounded-md hover:bg-blue-700 transition-colors">
@@ -436,7 +407,6 @@ function App() {
           </span>
         </fieldset>
 
-        {/* Reload Button */}
         <button 
           className='text-[10px] gap-x-3 p-3 rounded-lg bg-gray-50 shadow-sm w-max max-w-xs bg-orange-500 rounded-sm hover:bg-orange-600 text-gray-50 ml-3' 
           onClick={() => window.location.reload()}
@@ -444,7 +414,6 @@ function App() {
           Reload Page
         </button>
 
-        {/* Search Input */}
         <input
           type="text"
           value={searchTerm}
@@ -454,7 +423,6 @@ function App() {
         />
       </div>
 
-      {/* Table */}
       <div className="overflow-x-auto">
         <table className="min-w-full w-max table-auto border-collapse mb-4">
           <thead className="bg-gray-100">
@@ -510,7 +478,10 @@ function App() {
           </thead>
           <tbody>
             {paginatedDataOne?.map((row, rowIndex) => (
-              <tr key={rowIndex} className={rowIndex % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
+              <tr 
+                key={`${row.MEMBER}-${rowIndex}`} 
+                className={rowIndex % 2 === 0 ? 'bg-gray-50' : 'bg-white'}
+              >
                 {headers.map((header, colIndex) => (
                   <td key={colIndex} className="px-4 py-2 text-xs md:text-sm text-gray-600">
                     {row[header] || ''}
@@ -560,7 +531,6 @@ function App() {
         </table>
       </div>
 
-      {/* Pagination */}
       <div className="flex justify-between items-center mt-4">
         <button
           onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
@@ -581,7 +551,6 @@ function App() {
         </button>
       </div>
 
-      {/* Mail Modal */}
       {isMailModalOpen && (
         <div className="fixed inset-0 flex justify-center items-center bg-black bg-opacity-50 z-50">
           <div className="bg-white p-6 rounded-lg shadow-lg w-96 max-h-[90vh] overflow-auto">
@@ -635,7 +604,6 @@ function App() {
         </div>
       )}
 
-      {/* Edit Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 flex justify-center items-center bg-black bg-opacity-50 z-50">
           <div className="bg-white p-6 rounded-lg shadow-lg w-96 max-h-[90vh] overflow-auto">
@@ -658,9 +626,18 @@ function App() {
             <div className="flex justify-between">
               <button 
                 onClick={handleSaveEdit} 
-                className="px-4 py-2 bg-green-500 text-white rounded-sm text-xs"
+                className={`px-4 py-2 ${isSaving ? 'bg-gray-400' : 'bg-green-500'} text-white rounded-sm text-xs flex items-center`}
+                disabled={isSaving}
               >
-                Save
+                {isSaving ? (
+                  <>
+                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Saving...
+                  </>
+                ) : 'Save'}
               </button>
               <button
                 onClick={() => {
@@ -669,6 +646,7 @@ function App() {
                   setEditedData({});
                 }}
                 className="px-4 py-2 bg-red-500 text-white rounded-sm text-xs"
+                disabled={isSaving}
               >
                 Cancel
               </button>
