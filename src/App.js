@@ -29,6 +29,7 @@ function App() {
   const [toggleFileOptions, setToggleFileOptions] = useState("hidden");
   const [rowsPerPage, setRowsPerPage] = useState(20);
   const [isMailModalOpen, setIsMailModalOpen] = useState(false);
+  const [filteredCount, setFilteredCount] = useState(0);
   const [mailForm, setMailForm] = useState({
     to: "",
     from: "",
@@ -70,7 +71,7 @@ function App() {
 
         const sheet = wb.Sheets[wb.SheetNames[0]];
         const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-        
+
         const headers = jsonData[0];
         const rows = jsonData.slice(1).map((row) => {
           let obj = {};
@@ -92,7 +93,7 @@ function App() {
 
         const existingFiles = JSON.parse(localStorage.getItem('excelFiles')) || [];
         const existingIndex = existingFiles.findIndex(f => f.fileName === uploadedFile.name);
-        
+
         if (existingIndex >= 0) {
           existingFiles[existingIndex] = fileData;
           Swal.fire('Updated!', 'File has been updated.', 'success');
@@ -129,16 +130,16 @@ function App() {
       if (result.isConfirmed) {
         const existingFiles = JSON.parse(localStorage.getItem('excelFiles')) || [];
         const updatedFiles = existingFiles.filter(f => f.fileName !== fileName);
-        
+
         localStorage.setItem('excelFiles', JSON.stringify(updatedFiles));
         setFileOptions(updatedFiles);
-        
+
         if (fileName === fileName) {
           setData([]);
           setHeaders([]);
           setFileName("");
         }
-        
+
         Swal.fire('Deleted!', 'The file has been deleted.', 'success');
       } else {
         Swal.fire('Cancelled', 'The file was not deleted.', 'info');
@@ -151,17 +152,17 @@ function App() {
   const handleExportFile = (fileName) => {
     try {
       setToggleFileOptions("hidden");
-      
+
       const fileData = fileOptions.find(f => f.fileName === fileName);
       if (!fileData) {
         Swal.fire('Error!', 'File not found.', 'error');
         return;
       }
-      
+
       const exportData = [fileData.headers, ...fileData.data.map(row => {
         return fileData.headers.map(header => row[header] || '');
       })];
-      
+
       const ws = XLSX.utils.aoa_to_sheet(exportData);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
@@ -175,7 +176,7 @@ function App() {
   function selectFileHandler(fileName) {
     setFileName(fileName);
     setToggleFileOptions("hidden");
-    
+
     const fileData = fileOptions.find(f => f.fileName === fileName);
     if (fileData) {
       setData(fileData.data);
@@ -203,18 +204,18 @@ function App() {
 
         const existingFiles = JSON.parse(localStorage.getItem('excelFiles')) || [];
         const fileIndex = existingFiles.findIndex(f => f.fileName === fileName);
-        
+
         if (fileIndex >= 0) {
           const updatedFiles = [...existingFiles];
           updatedFiles[fileIndex] = {
             ...existingFiles[fileIndex],
             data: updatedData
           };
-          
+
           localStorage.setItem('excelFiles', JSON.stringify(updatedFiles));
           setFileOptions(updatedFiles);
           setData(updatedData);
-          
+
           Swal.fire('Updated!', 'The Member has been updated.', 'success');
           setIsModalOpen(false);
           setEditingRowIndex(null);
@@ -253,13 +254,13 @@ function App() {
 
         const existingFiles = JSON.parse(localStorage.getItem('excelFiles')) || [];
         const fileIndex = existingFiles.findIndex(f => f.fileName === fileName);
-        
+
         if (fileIndex >= 0) {
           existingFiles[fileIndex].data = dataAfterDelete;
           localStorage.setItem('excelFiles', JSON.stringify(existingFiles));
           setFileOptions(existingFiles);
           setData(dataAfterDelete);
-          
+
           Swal.fire('Deleted!', 'The Member has been deleted.', 'success');
         }
       } else {
@@ -289,19 +290,19 @@ function App() {
     const htmlContent = ReactDOMServer.renderToStaticMarkup(
       <HtmlTemplate senderData={editedData} mailData={mailForm} row={mailRowData} />
     );
-    
+
     console.log("Email would be sent with:", {
       ...mailForm,
       htmlContent
     });
-    
+
     Swal.fire('Info', 'In a real application, this would send the email.', 'info');
     setIsMailModalOpen(false);
   }
 
   const handleMailFormChange = (e) => {
-    const {name, value} = e;
-    setMailForm({...mailForm, [name]: value});
+    const { name, value } = e;
+    setMailForm({ ...mailForm, [name]: value });
   }
 
   const paginatedDataOne = useMemo(() => {
@@ -311,6 +312,8 @@ function App() {
           String(value).toLowerCase().includes(searchTerm.toLowerCase())
         );
       });
+
+      setFilteredCount(filtered.length);
 
       const totalPages = Math.ceil(filtered.length / rowsPerPage);
       if (currentPage > totalPages && totalPages > 0) {
@@ -347,12 +350,38 @@ function App() {
     return [];
   }, [data, searchTerm, sortWithAddress, currentPage, rowsPerPage]);
 
+
+  // export filtered or searched data function
+
+  const exportFilteredResults = () => {
+    const filtered = data.filter((row) => {
+      return Object.values(row).some((value) =>
+        String(value).toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    });
+
+    if (filtered.length === 0) {
+      Swal.fire('No Results', 'There are no matching rows to export.', 'info');
+      return;
+    }
+
+    const exportData = [headers, ...filtered.map(row => {
+      return headers.map(header => row[header] || '');
+    })];
+
+    const ws = XLSX.utils.aoa_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "SearchResults");
+    XLSX.writeFile(wb, `FilteredResults_${fileName || 'export'}`);
+  };
+
+
   return (
     <div className="max-w-4xl mx-auto my-5 p-5 bg-white rounded-lg shadow-lg max-w-full overflow-auto">
       <div className="flex flex-wrap items-center justify-start mb-4 gap-y-2">
         <div className='w-max flex flex-col justify-start items-start relative z-10'>
-          <span 
-            className='w-full block cursor-pointer text-xs gap-x-3 p-3 py-3.5 border border-gray-300 rounded-lg bg-gray-50 shadow-sm w-max max-w-xs h-full' 
+          <span
+            className='w-full block cursor-pointer text-xs gap-x-3 p-3 py-3.5 border border-gray-300 rounded-lg bg-gray-50 shadow-sm w-max max-w-xs h-full'
             onClick={() => setToggleFileOptions(v => v === "hidden" ? "flex" : "hidden")}
           >
             File Options {toggleFileOptions === "hidden" ? "🔽" : "🔼"}
@@ -363,20 +392,20 @@ function App() {
                 <li className='text-xs flex felx-row items-center justify-between gap-x-2 border-t ' key={i}>
                   <span className='max-w-[160px] overflow-hidden' title={file.fileName}> {file.fileName} </span>
                   <div className='flex flex-row gap-x-1'>
-                    <button 
-                      className="text-[7px] text-gray-50 px-3 py-1 bg-red-500 rounded-sm" 
+                    <button
+                      className="text-[7px] text-gray-50 px-3 py-1 bg-red-500 rounded-sm"
                       onClick={() => handleDeleteFile(file.fileName)}
                     >
                       Delete
                     </button>
-                    <button 
-                      className="text-[7px] text-gray-50 px-3 py-1 bg-green-500 rounded-sm" 
+                    <button
+                      className="text-[7px] text-gray-50 px-3 py-1 bg-green-500 rounded-sm"
                       onClick={() => handleExportFile(file.fileName)}
                     >
                       Export
                     </button>
-                    <button 
-                      className="text-[7px] text-gray-50 px-3 py-1 bg-blue-500 rounded-sm" 
+                    <button
+                      className="text-[7px] text-gray-50 px-3 py-1 bg-blue-500 rounded-sm"
                       onClick={() => selectFileHandler(file.fileName)}
                     >
                       Load
@@ -392,7 +421,7 @@ function App() {
 
         <fieldset className="flex items-center gap-x-3 p-3 border border-gray-300 rounded-lg bg-gray-50 shadow-sm w-max max-w-xs ml-3">
           <label htmlFor="file-input" className="cursor-pointer text-gray-700 font-semibold text-sm">
-            <span style={{whiteSpace:"nowrap"}} className="bg-blue-500 text-white text-[10px] px-3 py-2 rounded-md hover:bg-blue-700 transition-colors">
+            <span style={{ whiteSpace: "nowrap" }} className="bg-blue-500 text-white text-[10px] px-3 py-2 rounded-md hover:bg-blue-700 transition-colors">
               Upload File
             </span>
           </label>
@@ -408,12 +437,27 @@ function App() {
           </span>
         </fieldset>
 
-        <button 
-          className='text-[10px] gap-x-3 p-3 rounded-lg bg-gray-50 shadow-sm w-max max-w-xs bg-orange-500 rounded-sm hover:bg-orange-600 text-gray-50 ml-3' 
-          onClick={() => window.location.reload()}
-        >
-          Reload Page
-        </button>
+        <div className="flex items-center gap-x-3 ml-3">
+          <button
+            className='text-[10px] gap-x-3 p-3 rounded-lg bg-orange-500 shadow-sm text-white hover:bg-orange-600'
+            onClick={() => window.location.reload()}
+          >
+            Reload Page
+          </button>
+          <span className="text-[10px] text-gray-700 bg-gray-100 px-2 py-1 rounded">
+            Showing {filteredCount} of {data.length} records
+          </span>
+          {filteredCount > 0 && searchTerm && (
+            <button
+              onClick={exportFilteredResults}
+              className="text-[10px] px-3 py-2 rounded-md bg-green-600 text-white hover:bg-green-700 ml-3"
+            >
+              Export Search Results
+            </button>
+          )}
+
+        </div>
+
 
         <input
           type="text"
@@ -431,42 +475,42 @@ function App() {
               {headers.map((header, index) => (
                 <th key={index} className="px-4 py-2 text-xs md:text-sm border-b text-left font-semibold text-gray-700">
                   {header}
-                  {(header === "ADDRESS" || header === "MEMBER") ? 
+                  {(header === "ADDRESS" || header === "MEMBER") ?
                     <fieldset className='ml-1 flex gap-x-[4px] mt-[6px]'>
                       <span className='flex flex-col'>
                         <label className='text-[8px]' htmlFor={`${header}-SORT-NONE`}>NONE</label>
-                        <input 
-                          defaultChecked={true} 
-                          onChange={(e) => setSortWithAddress(e.target.value)} 
-                          type='radio' 
-                          name={`${header}-SORT`} 
-                          id={`${header}-SORT-NONE`} 
-                          className='text-xs' 
-                          value="" 
+                        <input
+                          defaultChecked={true}
+                          onChange={(e) => setSortWithAddress(e.target.value)}
+                          type='radio'
+                          name={`${header}-SORT`}
+                          id={`${header}-SORT-NONE`}
+                          className='text-xs'
+                          value=""
                         />
                       </span>
 
                       <span className='flex flex-col'>
                         <label className='text-[8px]' htmlFor={`${header}-SORT-ASC`}>ASC</label>
-                        <input 
-                          onChange={(e) => setSortWithAddress(e.target.value)} 
-                          type='radio' 
-                          name={`${header}-SORT`} 
-                          id={`${header}-SORT-ASC`} 
-                          className='text-xs' 
-                          value={`${header}-ASC`} 
+                        <input
+                          onChange={(e) => setSortWithAddress(e.target.value)}
+                          type='radio'
+                          name={`${header}-SORT`}
+                          id={`${header}-SORT-ASC`}
+                          className='text-xs'
+                          value={`${header}-ASC`}
                         />
                       </span>
 
                       <span className='flex flex-col'>
                         <label className='text-[8px]' htmlFor={`${header}-SORT-DESC`}>DESC</label>
-                        <input 
-                          onChange={(e) => setSortWithAddress(e.target.value)} 
-                          type='radio' 
-                          name={`${header}-SORT`} 
-                          id={`${header}-SORT-DESC`} 
-                          className='text-xs' 
-                          value={`${header}-DESC`} 
+                        <input
+                          onChange={(e) => setSortWithAddress(e.target.value)}
+                          type='radio'
+                          name={`${header}-SORT`}
+                          id={`${header}-SORT-DESC`}
+                          className='text-xs'
+                          value={`${header}-DESC`}
                         />
                       </span>
                     </fieldset>
@@ -479,8 +523,8 @@ function App() {
           </thead>
           <tbody>
             {paginatedDataOne?.map((row, rowIndex) => (
-              <tr 
-                key={`${row.MEMBER}-${rowIndex}`} 
+              <tr
+                key={`${row.MEMBER}-${rowIndex}`}
                 className={rowIndex % 2 === 0 ? 'bg-gray-50' : 'bg-white'}
               >
                 {headers.map((header, colIndex) => (
@@ -510,9 +554,9 @@ function App() {
                     {isNaN(row.MEMBER) ? <span className='line-through'>Delete</span> : "Delete"}
                   </button>
                   <button
-                    onClick={() => { 
+                    onClick={() => {
                       // Find the index of the current row in the original data array
-                      const originalIndex = data.findIndex(item => 
+                      const originalIndex = data.findIndex(item =>
                         item.MEMBER === row.MEMBER && item.NAME === row.NAME
                       );
                       setEditingRowIndex(originalIndex);
@@ -523,11 +567,11 @@ function App() {
                   >
                     {isNaN(row.MEMBER) ? <span className='line-through'>Edit</span> : "Edit"}
                   </button>
-                  <button 
-                    className="px-3 py-1.5 bg-blue-500 text-xs text-white rounded-md" 
+                  <button
+                    className="px-3 py-1.5 bg-blue-500 text-xs text-white rounded-md"
                     onClick={() => toggleMailForm(row)}
                   >
-                    Mail 
+                    Mail
                   </button>
                 </td>
               </tr>
@@ -569,9 +613,9 @@ function App() {
                   {mail !== "message" ? (
                     <input
                       type={
-                        mail === "attachment" ? "file" : 
-                        mail === "date" ? "date" : 
-                        mail === "to" ? "email" : "text"
+                        mail === "attachment" ? "file" :
+                          mail === "date" ? "date" :
+                            mail === "to" ? "email" : "text"
                       }
                       id={mail}
                       name={mail}
@@ -592,8 +636,8 @@ function App() {
               );
             })}
             <div className="flex justify-between">
-              <button 
-                onClick={submitMail} 
+              <button
+                onClick={submitMail}
                 className="px-4 py-2 bg-green-500 text-white rounded-sm text-xs"
               >
                 Send
@@ -629,8 +673,8 @@ function App() {
               </div>
             ))}
             <div className="flex justify-between">
-              <button 
-                onClick={handleSaveEdit} 
+              <button
+                onClick={handleSaveEdit}
                 className={`px-4 py-2 ${isSaving ? 'bg-gray-400' : 'bg-green-500'} text-white rounded-sm text-xs flex items-center`}
                 disabled={isSaving}
               >
